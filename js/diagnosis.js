@@ -22,6 +22,23 @@
 
   /** 模块固定顺序，保证雷达图/输出的键序稳定 */
   var MODULES = ['代数', '几何', '数论', '组合'];
+  // 二试四大模块（雷达图主轴）；一试的其他模块归并进来参与统计
+  var RADAR_AXES = ['代数', '几何', '数论', '组合'];
+  var MODULE_GROUP = {
+    '代数': '代数', '函数': '代数', '不等式': '代数', '数列': '代数', '复数': '代数', '三角': '代数',
+    '几何': '几何', '立体几何': '几何', '解析几何': '几何',
+    '数论': '数论',
+    '组合': '组合', '概率统计': '组合',
+  };
+  /** 动态获取题库中出现的所有模块 */
+  function allModules(problems) {
+    var set = {};
+    (problems || []).forEach(function (p) { if (p && p.module) set[p.module] = 1; });
+    // 保证四大模块在前
+    var order = MODULES.slice();
+    Object.keys(set).forEach(function (m) { if (order.indexOf(m) < 0) order.push(m); });
+    return order;
+  }
 
   /** 题量置信度参数：题量达到 CONF_SAT 时完全信任实测值，不足则向 50% 回归 */
   var CONF_BASE = 2;   // 等效先验题量
@@ -86,6 +103,8 @@
       question: p.question || '',
       solution: p.solution || '',
       source: p.source || '',
+      paper: p.paper || '',
+      scanPage: p.scanPage,
       year: p.year
     };
   }
@@ -160,7 +179,7 @@
     var index = buildIndex(problems);
     var byKp = {};       // kp -> {module, recs:[]}
     var byModule = {};   // module -> recs:[]
-    for (var m = 0; m < MODULES.length; m++) byModule[MODULES[m]] = [];
+    allModules(problems).forEach(function (m) { byModule[m] = []; });
 
     var list = Array.isArray(records) ? records : [];
     for (var i = 0; i < list.length; i++) {
@@ -169,7 +188,8 @@
       var pid = (r.problemId !== undefined) ? r.problemId : r.id;
       var prob = index[pid] ? normProblem(index[pid]) : null;
       if (!prob) continue; // 题库中找不到该题则忽略，避免污染统计
-      if (byModule[prob.module]) byModule[prob.module].push(r);
+      if (!byModule[prob.module]) byModule[prob.module] = [];
+      byModule[prob.module].push(r);
       var kps = prob.knowledgePoints.length ? prob.knowledgePoints : [(prob.module || '其它') + '综合'];
       for (var k = 0; k < kps.length; k++) {
         var kp = kps[k];
@@ -191,8 +211,7 @@
     var agg = aggregate(records, problems);
 
     var moduleStats = {};
-    for (var m = 0; m < MODULES.length; m++) {
-      var mod = MODULES[m];
+    allModules(problems).forEach(function (mod) {
       var st = groupStat(agg.byModule[mod] || []);
       moduleStats[mod] = {
         done: st.done,
@@ -202,7 +221,7 @@
         mastery: round1(st.mastery * 100),
         level: st.level
       };
-    }
+    });
 
     var kpStats = [];
     for (var kp in agg.byKp) {
@@ -258,11 +277,19 @@
       return kpOut(k);
     });
 
-    // 雷达图：模块掌握度（mastery 已是 0~100 百分数，直接取整）
+    // 雷达图：把各细模块按 MODULE_GROUP 归并到 4 大主轴（加权平均掌握度）
     var radar = {};
-    for (var i = 0; i < MODULES.length; i++) {
-      radar[MODULES[i]] = Math.round(moduleStats[MODULES[i]].mastery || 0);
-    }
+    var axisAcc = {}, axisN = {};
+    RADAR_AXES.forEach(function (a) { axisAcc[a] = 0; axisN[a] = 0; radar[a] = 0; });
+    Object.keys(moduleStats).forEach(function (m) {
+      var axis = MODULE_GROUP[m] || '代数';
+      var s = moduleStats[m];
+      if (!RADAR_AXES[0] && RADAR_AXES.indexOf(axis) < 0) return;
+      if (s.done > 0) { axisAcc[axis] += s.mastery * s.done; axisN[axis] += s.done; }
+    });
+    RADAR_AXES.forEach(function (a) {
+      radar[a] = axisN[a] ? Math.round(axisAcc[a] / axisN[a]) : 0;
+    });
 
     var overall = overallStat(records, moduleStats);
     var suggestions = buildSuggestions(weakPoints, moduleStats, overall, unpracticed, kpStats);
@@ -293,10 +320,10 @@
     var st = groupStat(Array.isArray(records) ? records : []);
     // 模块掌握度平均（仅计入练过的模块，未练不计入）
     var practicedMastery = [];
-    for (var i = 0; i < MODULES.length; i++) {
-      var ms = moduleStats[MODULES[i]];
+    Object.keys(moduleStats).forEach(function (m) {
+      var ms = moduleStats[m];
       if (ms && ms.done > 0) practicedMastery.push(ms.mastery);
-    }
+    });
     var moduleAvg = practicedMastery.length ? avg(practicedMastery) : 0;
     // 总体掌握度：整体统计与模块平均各半（均为百分数），兼顾广度与深度
     var mastery = st.done === 0 ? 0 : round1(st.mastery * 100 * 0.5 + moduleAvg * 0.5);
@@ -324,14 +351,13 @@
 
     // 2) 最弱模块：在练过的模块中按正确率升序取最低（accuracy 为百分数）
     var worstMod = null, worstAcc = 101, worstM = 101;
-    for (var i = 0; i < MODULES.length; i++) {
-      var mod = MODULES[i];
+    Object.keys(moduleStats).forEach(function (mod) {
       var ms = moduleStats[mod];
-      if (ms.done === 0) continue;
+      if (!ms || ms.done === 0) return;
       if (ms.accuracy < worstAcc || (ms.accuracy === worstAcc && ms.mastery < worstM)) {
         worstAcc = ms.accuracy; worstM = ms.mastery; worstMod = mod;
       }
-    }
+    });
     if (worstMod && worstAcc < 90) {
       out.push('【最需补强模块】' + worstMod + '（正确率 ' + Math.round(worstAcc)
         + '%），建议本周安排 60% 的训练时间在此模块。');
@@ -356,9 +382,9 @@
     }
 
     // 5) 广度提醒
-    var untouchedMods = MODULES.filter(function (m) { return moduleStats[m].done === 0; });
+    var untouchedMods = Object.keys(moduleStats).filter(function (m) { return moduleStats[m].done === 0; });
     if (untouchedMods.length) {
-      out.push('【广度提醒】' + untouchedMods.join('、') + ' 模块尚未练习，二试按模块分布命题，务必补齐基础题。');
+      out.push('【广度提醒】' + untouchedMods.slice(0, 6).join('、') + ' 等模块尚未练习，按考点分布命题，建议补齐基础题。');
     }
 
     // 6) 训练节奏
@@ -557,6 +583,8 @@
     computeMastery: computeMastery,
     levelOf: levelOf,
     MODULES: MODULES,
+    allModules: allModules,
+    RADAR_AXES: RADAR_AXES,
     _internal: {
       groupStat: groupStat,
       aggregate: aggregate,
