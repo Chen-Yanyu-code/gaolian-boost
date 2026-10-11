@@ -37,7 +37,7 @@ window.MathJax = {
   <!-- ========== 总览 ========== -->
   <section class="view active" id="view-dashboard">
     <div class="page-title">学习总览</div>
-    <div class="page-desc">基于你的做题数据，实时追踪模块掌握度与提分优先级</div>
+    <div class="page-desc">基于你的做题数据，实时追踪一试 / 二试各模块掌握度与提分优先级</div>
     <div class="stat-cards" id="dash-stats"></div>
     <div class="grid-2">
       <div class="card">
@@ -45,8 +45,18 @@ window.MathJax = {
         <div class="radar-wrap" id="dash-radar"></div>
       </div>
       <div class="card">
+        <h3>📚 一试 / 二试 进度</h3>
+        <div id="dash-paper"></div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
         <h3>⚠️ 待攻克知识点</h3>
         <div id="dash-weak"></div>
+      </div>
+      <div class="card">
+        <h3>📊 模块掌握度</h3>
+        <div id="dash-modules"></div>
       </div>
     </div>
     <div class="card">
@@ -66,9 +76,17 @@ window.MathJax = {
       <div class="page-desc" id="browse-count">共 0 题</div>
       <div class="filters">
         <input type="search" id="f-search" placeholder="搜索题目内容 / 关键词…">
+        <select id="f-paper">
+          <option value="">一试+二试</option>
+          <option value="一试">一试</option>
+          <option value="二试">二试</option>
+        </select>
         <select id="f-module">
           <option value="">全部模块</option>
           <option>代数</option><option>几何</option><option>数论</option><option>组合</option>
+          <option>函数</option><option>三角</option><option>不等式</option>
+          <option>立体几何</option><option>解析几何</option><option>数列</option>
+          <option>复数</option><option>概率统计</option>
         </select>
         <select id="f-kp"><option value="">全部知识点</option></select>
         <select id="f-diff">
@@ -96,19 +114,36 @@ window.MathJax = {
         <div class="q-detail">
           <div class="q-head" id="q-head"></div>
           <div class="q-text" id="q-text"></div>
-          <button class="btn" id="toggle-sol">查看解析</button>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+            <button class="btn sm" id="toggle-sol">查看解析</button>
+            <button class="btn sm" id="view-scan" style="display:none">📄 查看原题扫描</button>
+          </div>
           <div class="sol-box hidden" id="q-sol"></div>
           <div class="empty-hint" id="q-nosol" style="display:none">本题暂无文字解析，可在「AI批改」中上传你的解答获取评分</div>
+          <div id="q-scan-wrap" style="display:none">
+            <img id="q-scan-img" alt="原题扫描" style="max-width:100%;border-radius:8px;border:1px solid var(--border)">
+          </div>
         </div>
       </div>
       <div class="card answer-area">
-        <h3>✍️ 我的作答</h3>
-        <textarea id="ans-input" placeholder="在此写下你的解答思路与过程（支持 LaTeX，如 $a^2+b^2$）…"></textarea>
-        <div class="self-score">
-          <span style="font-size:13.5px;color:var(--text-sub)">自评得分</span>
-          <input type="range" id="score-range" min="0" max="50" step="5" value="25">
-          <span class="val" id="score-val">25</span>
-          <span style="font-size:13px;color:var(--text-light)">/ 50</span>
+        <h3 id="ans-title">✍️ 我的作答</h3>
+        <!-- 填空题作答区 -->
+        <div id="fill-area" style="display:none">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <input id="fill-input" placeholder="输入答案…" style="flex:1;min-width:180px;padding:11px 14px;border:1px solid var(--border-strong);border-radius:8px;font-size:15px;font-family:inherit;outline:none">
+            <button class="btn primary" id="fill-check">提交</button>
+          </div>
+          <div id="fill-feedback" style="margin-top:12px;display:none"></div>
+        </div>
+        <!-- 解答题作答区 -->
+        <div id="solve-area">
+          <textarea id="ans-input" placeholder="在此写下你的解答思路与过程（支持 LaTeX，如 $a^2+b^2$）…"></textarea>
+          <div class="self-score">
+            <span style="font-size:13.5px;color:var(--text-sub)">自评得分</span>
+            <input type="range" id="score-range" min="0" max="50" step="5" value="25">
+            <span class="val" id="score-val">25</span>
+            <span style="font-size:13px;color:var(--text-light)">/ 50</span>
+          </div>
         </div>
         <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn primary" id="save-record">保存记录</button>
