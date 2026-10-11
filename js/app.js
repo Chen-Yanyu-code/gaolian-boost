@@ -329,7 +329,7 @@
     $('q-nosol').style.display = p.solution ? 'none' : 'block';
     $('toggle-sol').style.display = p.solution ? 'inline-flex' : 'none';
 
-    // 原题扫描（一试）
+    // 解答扫描（一试，答案页扫描件）
     if (p.scanPage) {
       $('view-scan').style.display = 'inline-flex';
       $('q-scan-img').src = 'scans/p' + String(p.scanPage).padStart(3, '0') + '.jpg';
@@ -337,7 +337,7 @@
       $('view-scan').style.display = 'none';
     }
     $('q-scan-wrap').style.display = 'none';
-    $('view-scan').textContent = '📄 查看原题扫描';
+    $('view-scan').textContent = '📄 查看解答扫描';
 
     // 填空 / 解答 两种作答界面
     var isFill = p.type === 'fill';
@@ -695,7 +695,7 @@
       var w = $('q-scan-wrap');
       var show = w.style.display === 'none';
       w.style.display = show ? 'block' : 'none';
-      this.textContent = show ? '📄 收起原题扫描' : '📄 查看原题扫描';
+      this.textContent = show ? '📄 收起解答扫描' : '📄 查看解答扫描';
     };
     if ($('fill-check')) $('fill-check').onclick = checkFill;
     if ($('fill-input')) $('fill-input').onkeydown = function (e) {
