@@ -21,8 +21,13 @@
     view: 'dashboard'
   };
 
-  var MOD_LV = { '代数': 'm0', '几何': 'm1', '数论': 'm2', '组合': 'm3' };
+  var MOD_LV = { '代数': 'm0', '几何': 'm1', '数论': 'm2', '组合': 'm3',
+    '函数': 'm0', '不等式': 'm0', '数列': 'm0', '复数': 'm0',
+    '三角': 'm1', '立体几何': 'm1', '解析几何': 'm1',
+    '概率统计': 'm3' };
   var LV_COLOR = ['#94a3b8', '#dc2626', '#f59e0b', '#2563eb', '#16a34a'];
+  // 一试以填空题为主，用统一模块名归并统计
+  var PAPER_OF = function (p) { return p.paper || '二试'; };
 
   /* ---------------- 工具 ---------------- */
   function $(id) { return document.getElementById(id); }
@@ -119,6 +124,11 @@
 
     drawRadar($('dash-radar'), a.radar);
 
+    // 一试 / 二试 进度
+    if ($('dash-paper')) $('dash-paper').innerHTML = paperProgressHTML();
+
+    if ($('dash-modules')) $('dash-modules').innerHTML = moduleRowsHTML(a);
+
     var weak = (a.weakPoints || []).slice(0, 5);
     if (!weak.length) {
       $('dash-weak').innerHTML = '<div class="empty-hint">暂无足够数据，多做一些题就能看到薄弱点了</div>';
@@ -137,6 +147,42 @@
     bindRecClicks();
   }
 
+  /* 一试 / 二试 进度条 */
+  function paperProgressHTML() {
+    var papers = [['一试', '填空题为主，8题+3解答'], ['二试', '4道大题，深度更强']];
+    return papers.map(function (pp) {
+      var name = pp[0];
+      var all = State.problems.filter(function (p) { return PAPER_OF(p) === name; });
+      var done = all.filter(function (p) { return !!recOf(p.id); });
+      var correct = done.filter(function (p) { var r = recOf(p.id); return r && r.correct; });
+      var pct = all.length ? Math.round(done.length / all.length * 100) : 0;
+      var acc = done.length ? Math.round(correct.length / done.length * 100) : 0;
+      return '<div style="margin-bottom:14px">' +
+        '<div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px">' +
+        '<b>' + name + '</b>' +
+        '<span style="color:var(--text-sub)">' + done.length + '/' + all.length +
+        ' 题 · 正确率 ' + (done.length ? acc + '%' : '--') + '</span></div>' +
+        '<div class="progress-bar"><i style="width:' + pct + '%"></i></div>' +
+        '<div style="font-size:12px;color:var(--text-light);margin-top:5px">' + pp[1] + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* 模块掌握度列表 */
+  function moduleRowsHTML(a) {
+    var D = window.Diagnosis;
+    if (!D) return '';
+    var mods = Object.keys(a.moduleStats || {});
+    return mods.map(function (m) {
+      var s = a.moduleStats[m] || { done: 0, accuracy: 0, mastery: 0 };
+      var lv = s.done ? D.levelOf(s.accuracy) : { i: 0, t: '未练' };
+      return '<div class="kp-row">' +
+        '<span class="name">' + esc(m) + ' <span style="color:var(--text-light);font-size:12px">(' + s.done + '题)</span></span>' +
+        '<span class="bar"><i style="width:' + Math.round(s.mastery || 0) + '%;background:' + LV_COLOR[lv.i] + '"></i></span>' +
+        '<span class="lv lv-' + lv.i + '">' + esc(lv.t) + '</span></div>';
+    }).join('');
+  }
+
   function card(num, lbl) {
     return '<div class="stat-card"><div class="num">' + esc(num) + '</div><div class="lbl">' + esc(lbl) + '</div></div>';
   }
@@ -150,10 +196,11 @@
       '</div>';
   }
 
-  /* 雷达图（SVG 自绘，四维） */
+  /* 雷达图（SVG 自绘，四维：代数/几何/数论/组合） */
   function drawRadar(host, radar) {
     if (!host) return;
-    var keys = ['代数', '几何', '数论', '组合'];
+    var keys = Object.keys(radar || {});
+    if (!keys.length) { host.innerHTML = '<div class="empty-hint">暂无数据</div>'; return; }
     var vals = keys.map(function (k) { return Math.max(4, radar[k] || 0); });
     var cx = 150, cy = 140, R = 100;
     function pt(i, r) {
@@ -205,9 +252,11 @@
 
   function applyFilter() {
     var q = ($('f-search').value || '').trim().toLowerCase();
+    var paper = $('f-paper') ? $('f-paper').value : '';
     var mod = $('f-module').value, kp = $('f-kp').value,
       diff = $('f-diff').value, src = $('f-source').value, st = $('f-status').value;
     State.filtered = State.problems.filter(function (p) {
+      if (paper && PAPER_OF(p) !== paper) return false;
       if (mod && p.module !== mod) return false;
       if (kp && (p.knowledgePoints || []).indexOf(kp) < 0) return false;
       if (diff && String(p.difficulty) !== diff) return false;
@@ -237,12 +286,16 @@
       var r = recOf(p.id);
       var badge = r ? (r.correct ? '<span class="badge ok">已做 ✓</span>' : '<span class="badge no">已做 ✗</span>')
         : (isWrong(p.id) ? '<span class="badge no">错题</span>' : '');
-      var kps = (p.knowledgePoints || []).map(function (k) { return '<span class="tag">' + esc(k) + '</span>'; }).join('');
+      var kps = (p.knowledgePoints || []).slice(0, 2).map(function (k) { return '<span class="tag">' + esc(k) + '</span>'; }).join('');
+      var paperTag = PAPER_OF(p) === '一试'
+        ? '<span class="tag paper-y">一试·填空</span>'
+        : '<span class="tag paper-e">二试</span>';
       return '<div class="pitem" data-id="' + esc(p.id) + '">' +
         '<span class="pid">' + esc(p.id) + '</span>' +
         '<div class="pbody">' +
         '<div class="txt">' + esc((p.question || '').replace(/\s+/g, ' ').slice(0, 160)) + '</div>' +
         '<div class="pm">' +
+        paperTag +
         '<span class="tag ' + (MOD_LV[p.module] || '') + '">' + esc(p.module) + '</span>' +
         '<span class="tag diff">' + stars(p.difficulty) + '</span>' +
         kps + badge +
@@ -261,12 +314,14 @@
     State.current = p;
     $('browse-list-view').style.display = 'none';
     $('browse-detail-view').style.display = 'block';
+    var paperTag = PAPER_OF(p) === '一试'
+      ? '<span class="tag paper-y">一试</span>' : '<span class="tag paper-e">二试</span>';
     $('q-head').innerHTML =
-      '<span class="pid">' + esc(p.id) + '</span>' +
+      '<span class="pid">' + esc(p.id) + '</span>' + paperTag +
       '<span class="tag ' + (MOD_LV[p.module] || '') + '">' + esc(p.module) + '</span>' +
       '<span class="tag diff">' + stars(p.difficulty) + '</span>' +
       (p.source ? '<span class="tag">' + esc(p.source) + '</span>' : '') +
-      (p.knowledgePoints || []).map(function (k) { return '<span class="tag">' + esc(k) + '</span>'; }).join('');
+      (p.knowledgePoints || []).slice(0, 2).map(function (k) { return '<span class="tag">' + esc(k) + '</span>'; }).join('');
     $('q-text').innerHTML = esc(p.question || '（题干缺失）');
     $('q-sol').innerHTML = esc(p.solution || '');
     $('q-sol').classList.add('hidden');
@@ -274,18 +329,80 @@
     $('q-nosol').style.display = p.solution ? 'none' : 'block';
     $('toggle-sol').style.display = p.solution ? 'inline-flex' : 'none';
 
+    // 原题扫描（一试）
+    if (p.scanPage) {
+      $('view-scan').style.display = 'inline-flex';
+      $('q-scan-img').src = 'scans/p' + String(p.scanPage).padStart(3, '0') + '.jpg';
+    } else {
+      $('view-scan').style.display = 'none';
+    }
+    $('q-scan-wrap').style.display = 'none';
+    $('view-scan').textContent = '📄 查看原题扫描';
+
+    // 填空 / 解答 两种作答界面
+    var isFill = p.type === 'fill';
+    $('fill-area').style.display = isFill ? 'block' : 'none';
+    $('solve-area').style.display = isFill ? 'none' : 'block';
+    $('ans-title').textContent = isFill ? '✍️ 填写答案' : '✍️ 我的作答';
+    $('score-range').parentNode.style.display = isFill ? 'none' : 'flex';
+
     var r = recOf(p.id);
-    $('ans-input').value = r ? (r.answer || '') : '';
-    var sc = r ? (r.score != null ? r.score : 25) : 25;
-    $('score-range').value = sc; $('score-val').textContent = sc;
+    if (isFill) {
+      $('fill-input').value = r ? (r.answer || '') : '';
+      $('fill-feedback').style.display = 'none';
+    } else {
+      $('ans-input').value = r ? (r.answer || '') : '';
+      var sc = r ? (r.score != null ? r.score : 25) : 25;
+      $('score-range').value = sc; $('score-val').textContent = sc;
+    }
     typeset($('browse-detail-view'));
     window.scrollTo(0, 0);
+  }
+
+  /* 填空题判分：比对答案（归一化后） */
+  function checkFill() {
+    var p = State.current;
+    if (!p) return;
+    var val = ($('fill-input').value || '').trim();
+    if (!val) { toast('请先填写答案'); return; }
+    var correct = !!p.answer && normAns(val) === normAns(p.answer);
+    var fb = $('fill-feedback');
+    fb.style.display = 'block';
+    if (p.answer) {
+      fb.innerHTML = correct
+        ? '<div class="fill-ok">✅ 正确！</div>'
+        : '<div class="fill-no">❌ 与参考答案不一致<br><span style="font-size:13px;color:var(--text-sub)">参考答案：' + esc(p.answer) + '</span></div>';
+    } else {
+      fb.innerHTML = '<div class="fill-unknown">📝 本题暂无参考答案，已记录你的作答，可在「AI批改」上传解答获取评分。</div>';
+    }
+    // 记录
+    var score = correct ? 50 : (p.answer ? 0 : 25);
+    State.records = State.records.filter(function (x) { return String(x.problemId) !== String(p.id); });
+    State.records.push({
+      problemId: p.id, module: p.module, knowledgePoints: p.knowledgePoints || [],
+      difficulty: p.difficulty, score: score, fullScore: 50, correct: correct,
+      answer: val, paper: p.paper, timeSpent: 0, timestamp: Date.now()
+    });
+    store(LS_RECORDS, State.records);
+    if (correct) {
+      State.wrong = State.wrong.filter(function (w) { return String(w) !== String(p.id); });
+      store(LS_WRONG, State.wrong);
+    }
+    updateTopStats();
+  }
+
+  function normAns(s) {
+    return String(s).replace(/\s+/g, '').replace(/[，,]/g, ',')
+      .replace(/[（]/g, '(').replace(/[）]/g, ')')
+      .replace(/\$/g, '').toLowerCase();
   }
 
   function saveRecord(opts) {
     var p = State.current;
     if (!p) return;
     opts = opts || {};
+    // 填空题：走提交判分逻辑
+    if (p.type === 'fill') { checkFill(); return; }
     var score = parseInt($('score-range').value, 10);
     var answer = $('ans-input').value || '';
     var rec = {
@@ -293,6 +410,7 @@
       module: p.module,
       knowledgePoints: p.knowledgePoints || [],
       difficulty: p.difficulty,
+      paper: p.paper,
       score: score,
       fullScore: 50,
       correct: score >= 35,
@@ -335,14 +453,7 @@
     drawRadar($('diag-radar'), a.radar);
 
     // 模块掌握度
-    $('diag-modules').innerHTML = ['代数', '几何', '数论', '组合'].map(function (m) {
-      var s = a.moduleStats[m] || { done: 0, accuracy: 0, mastery: 0 };
-      var lv = a.overall && s.done ? D.levelOf(s.accuracy) : { i: 0, t: '未练' };
-      return '<div class="kp-row">' +
-        '<span class="name">' + m + ' <span style="color:var(--text-light);font-size:12px">(' + s.done + '题)</span></span>' +
-        '<span class="bar"><i style="width:' + Math.round(s.mastery || 0) + '%;background:' + LV_COLOR[lv.i] + '"></i></span>' +
-        '<span class="lv lv-' + lv.i + '">' + esc(lv.t) + '</span></div>';
-    }).join('');
+    $('diag-modules').innerHTML = moduleRowsHTML(a);
 
     $('diag-weak').innerHTML = (a.weakPoints || []).length
       ? a.weakPoints.map(kpRow).join('')
@@ -560,7 +671,8 @@
     });
 
     // 刷题筛选
-    ['f-search', 'f-module', 'f-kp', 'f-diff', 'f-source', 'f-status'].forEach(function (id) {
+    ['f-search', 'f-module', 'f-kp', 'f-diff', 'f-source', 'f-status', 'f-paper'].forEach(function (id) {
+      if (!$(id)) return;
       $(id).addEventListener('input', function () { renderBrowse(true); });
       $(id).addEventListener('change', function () { renderBrowse(true); });
     });
@@ -578,6 +690,16 @@
       var hidden = s.classList.toggle('hidden');
       this.textContent = hidden ? '查看解析' : '收起解析';
       if (!hidden) typeset(s);
+    };
+    $('view-scan').onclick = function () {
+      var w = $('q-scan-wrap');
+      var show = w.style.display === 'none';
+      w.style.display = show ? 'block' : 'none';
+      this.textContent = show ? '📄 收起原题扫描' : '📄 查看原题扫描';
+    };
+    if ($('fill-check')) $('fill-check').onclick = checkFill;
+    if ($('fill-input')) $('fill-input').onkeydown = function (e) {
+      if (e.key === 'Enter') checkFill();
     };
     $('score-range').oninput = function () { $('score-val').textContent = this.value; };
     $('save-record').onclick = function () { saveRecord(); };
