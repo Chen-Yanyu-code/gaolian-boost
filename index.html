@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>高联智能提分系统</title>
+<link rel="stylesheet" href="css/style.css">
+<script>
+window.MathJax = {
+  tex: {inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']]},
+  svg: {fontCache: 'global'},
+  options: {skipHtmlTags: ['script','noscript','style','textarea','pre','code']}
+};
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="logo">高</span><span>高联智能提分</span></div>
+  <nav class="nav" id="nav">
+    <button data-view="dashboard" class="active">总览</button>
+    <button data-view="browse">刷题</button>
+    <button data-view="diagnosis">诊断提分</button>
+    <button data-view="grade">AI批改</button>
+    <button data-view="wrong">错题本</button>
+    <button data-view="settings">设置</button>
+  </nav>
+  <div class="stat-mini">
+    <span>已做 <b id="s-done">0</b></span>
+    <span>正确率 <b id="s-acc">--</b></span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ========== 总览 ========== -->
+  <section class="view active" id="view-dashboard">
+    <div class="page-title">学习总览</div>
+    <div class="page-desc">基于你的做题数据，实时追踪模块掌握度与提分优先级</div>
+    <div class="stat-cards" id="dash-stats"></div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>🎯 能力雷达</h3>
+        <div class="radar-wrap" id="dash-radar"></div>
+      </div>
+      <div class="card">
+        <h3>⚠️ 待攻克知识点</h3>
+        <div id="dash-weak"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>💡 提分建议</h3>
+      <ul class="suggest-list" id="dash-suggest"></ul>
+    </div>
+    <div class="card">
+      <h3>📌 今日推荐练习</h3>
+      <div id="dash-rec"></div>
+    </div>
+  </section>
+
+  <!-- ========== 刷题 ========== -->
+  <section class="view" id="view-browse">
+    <div id="browse-list-view">
+      <div class="page-title">题库</div>
+      <div class="page-desc" id="browse-count">共 0 题</div>
+      <div class="filters">
+        <input type="search" id="f-search" placeholder="搜索题目内容 / 关键词…">
+        <select id="f-module">
+          <option value="">全部模块</option>
+          <option>代数</option><option>几何</option><option>数论</option><option>组合</option>
+        </select>
+        <select id="f-kp"><option value="">全部知识点</option></select>
+        <select id="f-diff">
+          <option value="">全部难度</option>
+          <option value="1">★ 入门</option><option value="2">★★ 基础</option>
+          <option value="3">★★★ 中等</option><option value="4">★★★★ 较难</option>
+          <option value="5">★★★★★ 极难</option>
+        </select>
+        <select id="f-source"><option value="">全部题源</option></select>
+        <select id="f-status">
+          <option value="">全部状态</option>
+          <option value="todo">未做</option><option value="done">已做</option><option value="wrong">错题</option>
+        </select>
+      </div>
+      <div class="plist" id="plist"></div>
+      <div style="text-align:center;margin-top:16px">
+        <button class="btn" id="load-more" style="display:none">加载更多</button>
+      </div>
+    </div>
+
+    <!-- 题目详情 -->
+    <div id="browse-detail-view" style="display:none">
+      <button class="btn ghost sm" id="back-list">← 返回列表</button>
+      <div class="card" style="margin-top:12px">
+        <div class="q-detail">
+          <div class="q-head" id="q-head"></div>
+          <div class="q-text" id="q-text"></div>
+          <button class="btn" id="toggle-sol">查看解析</button>
+          <div class="sol-box hidden" id="q-sol"></div>
+          <div class="empty-hint" id="q-nosol" style="display:none">本题暂无文字解析，可在「AI批改」中上传你的解答获取评分</div>
+        </div>
+      </div>
+      <div class="card answer-area">
+        <h3>✍️ 我的作答</h3>
+        <textarea id="ans-input" placeholder="在此写下你的解答思路与过程（支持 LaTeX，如 $a^2+b^2$）…"></textarea>
+        <div class="self-score">
+          <span style="font-size:13.5px;color:var(--text-sub)">自评得分</span>
+          <input type="range" id="score-range" min="0" max="50" step="5" value="25">
+          <span class="val" id="score-val">25</span>
+          <span style="font-size:13px;color:var(--text-light)">/ 50</span>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn primary" id="save-record">保存记录</button>
+          <button class="btn" id="mark-wrong">标记为错题</button>
+          <button class="btn" id="next-problem">下一题 →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 诊断 ========== -->
+  <section class="view" id="view-diagnosis">
+    <div class="page-title">诊断提分</div>
+    <div class="page-desc">识别薄弱知识点，按提分性价比排序推荐练习</div>
+    <div id="diag-empty" class="card" style="display:none">
+      <div class="loading" style="padding:24px">
+        还没有做题记录。先去「刷题」完成几道题，系统才能为你诊断。<br><br>
+        <button class="btn primary" onclick="App.go('browse')">开始刷题</button>
+      </div>
+    </div>
+    <div id="diag-main" style="display:none">
+      <div class="stat-cards" id="diag-stats"></div>
+      <div class="grid-2">
+        <div class="card"><h3>🎯 能力雷达</h3><div class="radar-wrap" id="diag-radar"></div></div>
+        <div class="card"><h3>📊 模块掌握度</h3><div id="diag-modules"></div></div>
+      </div>
+      <div class="card"><h3>⚠️ 薄弱知识点（按优先级）</h3><div id="diag-weak"></div></div>
+      <div class="card"><h3>💡 提分建议</h3><ul class="suggest-list" id="diag-suggest"></ul></div>
+      <div class="card">
+        <h3>🎯 精准推题
+          <select id="rec-strategy" style="margin-left:auto;font-size:13px;padding:4px 8px;border:1px solid var(--border-strong);border-radius:6px">
+            <option value="weak">攻薄弱点</option>
+            <option value="adaptive">动态适配</option>
+            <option value="random">随机拓展</option>
+          </select>
+        </h3>
+        <div id="diag-rec"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== AI批改 ========== -->
+  <section class="view" id="view-grade">
+    <div class="page-title">AI 智能批改</div>
+    <div class="page-desc">上传你的手写解答照片，按高联二试阅卷标准评分并指出逻辑缺口</div>
+
+    <div class="card">
+      <h3>① 选择题目</h3>
+      <div class="field">
+        <select id="g-problem"><option value="">— 不关联题库，仅批改作答 —</option></select>
+      </div>
+      <div class="field" id="g-problem-preview-wrap" style="display:none">
+        <div class="q-text" id="g-problem-preview" style="font-size:14px;margin-bottom:0"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>② 上传解答</h3>
+      <div class="grade-upload" id="upload-box">
+        <input type="file" id="g-file" accept="image/*">
+        <div class="ic">📷</div>
+        <div class="t">点击选择解答照片，或直接粘贴文字</div>
+      </div>
+      <img id="preview" alt="预览">
+      <div class="answer-area" style="margin-top:14px">
+        <label style="font-size:13.5px;font-weight:600;display:block;margin-bottom:6px">解答文字（可直接编辑/粘贴）</label>
+        <textarea id="g-text" placeholder="此处填写或粘贴你的解答过程…"></textarea>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn primary" id="g-run">开始批改</button>
+        <span style="font-size:12.5px;color:var(--text-light)" id="g-mode-hint"></span>
+      </div>
+      <div class="progress-bar" id="g-progress" style="display:none"><i style="width:10%"></i></div>
+    </div>
+
+    <div class="card" id="g-result-card" style="display:none">
+      <h3>③ 批改结果</h3>
+      <div class="score-big" id="g-score"></div>
+      <div id="g-breakdown"></div>
+      <div id="g-logic" style="margin-top:14px"></div>
+      <div id="g-advice" style="margin-top:14px"></div>
+    </div>
+  </section>
+
+  <!-- ========== 错题本 ========== -->
+  <section class="view" id="view-wrong">
+    <div class="page-title">错题本</div>
+    <div class="page-desc">收录标记为错题的题目，按知识点归类复习</div>
+    <div id="wrong-body"></div>
+  </section>
+
+  <!-- ========== 设置 ========== -->
+  <section class="view" id="view-settings">
+    <div class="page-title">设置</div>
+    <div class="page-desc">配置 AI 批改接口；数据保存在本地浏览器</div>
+
+    <div class="card">
+      <h3>🤖 AI 批改接口</h3>
+      <div class="field">
+        <label>服务商</label>
+        <select id="set-provider">
+          <option value="deepseek">DeepSeek（推荐·性价比高）</option>
+          <option value="qwen">通义千问 DashScope</option>
+          <option value="openai">OpenAI</option>
+          <option value="custom">自定义（OpenAI 兼容）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>API 地址 (Base URL)</label>
+        <input id="set-baseurl" placeholder="https://api.deepseek.com/v1">
+      </div>
+      <div class="field">
+        <label>模型名称</label>
+        <input id="set-model" placeholder="deepseek-chat">
+      </div>
+      <div class="field">
+        <label>API Key</label>
+        <input id="set-apikey" type="password" placeholder="sk-...">
+        <div class="hint">仅保存在本机浏览器 localStorage，不会上传到任何服务器。留空则使用本地启发式批改（无需网络）。</div>
+      </div>
+      <button class="btn primary" id="save-settings">保存设置</button>
+    </div>
+
+    <div class="card">
+      <h3>📊 数据管理</h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" id="export-data">导出做题数据</button>
+        <button class="btn" id="import-data">导入数据</button>
+        <input type="file" id="import-file" accept=".json" style="display:none">
+        <button class="btn" id="clear-data" style="color:var(--c-danger);border-color:#fecdd3">清空所有记录</button>
+      </div>
+      <div class="hint" style="font-size:12.5px;color:var(--text-light);margin-top:10px">
+        题库共 <b id="set-total">0</b> 题，含解析 <b id="set-sol">0</b> 题。
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>ℹ️ 关于</h3>
+      <div style="font-size:13.5px;color:var(--text-sub);line-height:1.9">
+        高联智能提分系统 v1.0<br>
+        融合题库刷题 · 薄弱点诊断 · AI批改 · 错题本 于一体<br>
+        题源：陈彦宇百题精选、陈祖维刷题材料、全国高中数学联赛真题<br>
+        数据存储于浏览器本地，刷新不丢失，换设备可通过导出/导入迁移。
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/diagnosis.js" onerror="window.__noDiag=1"></script>
+<script src="js/grading.js" onerror="window.__noGrade=1"></script>
+<script src="data/problems.unified.js" onerror="window.__noData=1"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
